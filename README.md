@@ -86,55 +86,52 @@ CREATE OR REPLACE FILE FORMAT csv_format
 
 V tejto fáze boli dáta zo staging tabuliek vyčistené, transformované a obohatené. Hlavným cieľom bolo pripraviť dimenzie a faktovú tabuľku, ktoré umožnia jednoduchú a efektívnu analýzu.
 
-Dimenzie boli navrhnuté na poskytovanie kontextu pre faktovú tabuľku. `Dim_movie` obsahuje údaje o názve, roku a dátume vydania, trvaní, produkčných krajinách, globálnych ziskoch, jazykoch v ktorých bol film uvedený, a produkčnej spoločnosti. Transformácia zahŕňala oddelenie stĺpcov "krajina" a "jazyky" do samostatných tabuliek. Tento proces predstavuje normalizáciu údajov, ktorá zlepšuje ich štruktúru, umožňuje efektívnejšie spracovanie, jednoduchšiu obnovu a vizualizáciu informácií týkajúcich sa uvedených stĺpcov.
+Transformácia zahŕňala oddelenie stĺpcov "country" a "languages" do samostatných tabuliek. Tento proces predstavuje normalizáciu údajov, ktorá zlepšuje ich štruktúru, umožňuje efektívnejšie spracovanie, jednoduchšiu obnovu a vizualizáciu informácií týkajúcich sa uvedených stĺpcov.
 ```sql
-CREATE TABLE dim_users AS
+-- dim_languages
+CREATE OR REPLACE TABLE dim_languages AS
 SELECT DISTINCT
-    u.userId AS dim_userId,
-    CASE 
-        WHEN u.age < 18 THEN 'Under 18'
-        WHEN u.age BETWEEN 18 AND 24 THEN '18-24'
-        WHEN u.age BETWEEN 25 AND 34 THEN '25-34'
-        WHEN u.age BETWEEN 35 AND 44 THEN '35-44'
-        WHEN u.age BETWEEN 45 AND 54 THEN '45-54'
-        WHEN u.age >= 55 THEN '55+'
-        ELSE 'Unknown'
-    END AS age_group,
-    u.gender,
-    o.name AS occupation,
-    e.name AS education_level
-FROM users_staging u
-JOIN occupations_staging o ON u.occupationId = o.occupationId
-JOIN education_levels_staging e ON u.educationId = e.educationId;
+    TRIM(value) AS language_name
+FROM movie_staging,
+LATERAL FLATTEN(INPUT => SPLIT(languages, ',')) AS language_split;
+
+-- dim_country
+CREATE OR REPLACE TABLE dim_country AS
+SELECT DISTINCT
+    TRIM(value) AS country_name
+FROM movie_staging,
+LATERAL FLATTEN(INPUT => SPLIT(country, ',')) AS country_split;
 ```
-Dimenzia `dim_date` je navrhnutá tak, aby uchovávala informácie o dátumoch hodnotení kníh. Obsahuje odvodené údaje, ako sú deň, mesiac, rok, deň v týždni (v textovom aj číselnom formáte) a štvrťrok. Táto dimenzia je štruktúrovaná tak, aby umožňovala podrobné časové analýzy, ako sú trendy hodnotení podľa dní, mesiacov alebo rokov. Z hľadiska SCD je táto dimenzia klasifikovaná ako SCD Typ 0. To znamená, že existujúce záznamy v tejto dimenzii sú nemenné a uchovávajú statické informácie.
+Dimenzia dim_names bola navrhnutá na uchovávanie informácií o jednotlivcoch spojených s filmami. Obsahuje atribúty, ako sú meno, výška, dátum narodenia, známe filmy a odvodené údaje, ako sú rola (herec, herečka alebo neznáma) a pohlavie (mužské, ženské alebo neznáme). 
 
-V prípade, že by bolo potrebné sledovať zmeny súvisiace s odvodenými atribútmi (napr. pracovné dni vs. sviatky), bolo by možné prehodnotiť klasifikáciu na SCD Typ 1 (aktualizácia hodnôt) alebo SCD Typ 2 (uchovávanie histórie zmien). V aktuálnom modeli však táto potreba neexistuje, preto je `dim_date` navrhnutá ako SCD Typ 0 s rozširovaním o nové záznamy podľa potreby.
-
+Tieto odvodené údaje sú vytvorené na základe kategórie definovanej v zdrojovej tabuľke role_mapping_staging. Táto dimenzia umožňuje vykonávať analýzy na základe charakteristík jednotlivcov a poskytuje obohatené údaje o pohlaví a roliach. Z hľadiska SCD je táto dimenzia klasifikovaná ako SCD Typ 0, pretože uchováva nemenné údaje.
 ```sql
-CREATE TABLE dim_date AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY CAST(timestamp AS DATE)) AS dim_dateID,
-    CAST(timestamp AS DATE) AS date,
-    DATE_PART(day, timestamp) AS day,
-    DATE_PART(dow, timestamp) + 1 AS dayOfWeek,
-    CASE DATE_PART(dow, timestamp) + 1
-        WHEN 1 THEN 'Pondelok'
-        WHEN 2 THEN 'Utorok'
-        WHEN 3 THEN 'Streda'
-        WHEN 4 THEN 'Štvrtok'
-        WHEN 5 THEN 'Piatok'
-        WHEN 6 THEN 'Sobota'
-        WHEN 7 THEN 'Nedeľa'
-    END AS dayOfWeekAsString,
-    DATE_PART(month, timestamp) AS month,
-    DATE_PART(year, timestamp) AS year,
-    DATE_PART(quarter, timestamp) AS quarter
-FROM ratings_staging;
+-- dim_names
+CREATE OR REPLACE TABLE dim_names AS
+SELECT 
+    n.id,
+    n.name,
+    n.height,
+    n.date_of_birth,
+    n.known_for_movies,
+    CASE
+        WHEN r.category = 'actor' THEN 'actor'
+        WHEN r.category = 'actress' THEN 'actress'
+        ELSE 'unknown'
+    END AS role,
+    CASE
+        WHEN r.category = 'actor' THEN 'male'
+        WHEN r.category = 'actress' THEN 'female'
+        ELSE 'unknown' 
+    END AS sex
+FROM names_staging n
+JOIN role_mapping_staging r ON n.id = r.name_id;
 ```
-Podobne `dim_books` obsahuje údaje o knihách, ako sú názov, autor, rok vydania a vydavateľ. Táto dimenzia je typu SCD Typ 0, pretože údaje o knihách sú považované za nemenné, napríklad názov knihy alebo meno autora sa nemenia. 
+Podobne `dim_genre` a `dim_ratings` obsahuju údaje ako sú názov žánru, priemerné hodnotenie, počet recenzií a median hodnotení. Táto dimenzia je typu SCD Typ 0, pretože údaje o žánroch a recenziách sa považujú za nemenné, napríklad priemerné hodnotenie a názvy žánrov sa nemenia.
+očnosti.
 
-Faktová tabuľka `fact_ratings` obsahuje záznamy o hodnoteniach a prepojenia na všetky dimenzie. Obsahuje kľúčové metriky, ako je hodnota hodnotenia a časový údaj.
+Tabuľka `FACT_MOVIE` je pripojená ku všetkým dimenziám, aj prostredníctvom prepojovacích tabuliek. Zahŕňa kľúčové ukazovatele, ako je názov filmu, trvanie a produkčná spoločnosť.
+
 ```sql
 CREATE TABLE fact_ratings AS
 SELECT 
@@ -151,6 +148,41 @@ JOIN dim_time t ON r.timestamp = t.timestamp
 JOIN dim_books b ON r.ISBN = b.dim_bookId
 JOIN dim_users u ON r.userId = u.dim_userId;
 ```
+Tabuľky `movie_language_mapping` a `movie_country_mapping` boli vytvorené pre mapovanie viacerých hodnôt (jazyky a krajiny) z jedného atribútu v tabuľke `movie_staging` do samostatných riadkov. Proces využíva funkciu LATERAL FLATTEN, aby umožnil oddeliť viacnásobné hodnoty uložené ako reťazce (napr. "English, French") a transformovať ich do štruktúry vhodnej na analýzu. Tieto tabuľky predstavujú normalizáciu údajov a uľahčujú agregáciu a vizualizáciu jazykových a geografických údajov spojených s filmami.
+
+```sql
+-- movie_language_mapping
+CREATE OR REPLACE TABLE movie_language_mapping AS 
+SELECT 
+    m.id AS movie_id,
+    TRIM(f.value::STRING) AS language_name
+FROM movie_staging m,
+     LATERAL FLATTEN(input => SPLIT(m.languages, ',')) f;
+```
+
+Tabuľka `movie_names_mapping` bola navrhnutá na mapovanie vzťahu medzi jednotlivcami (names_id) a filmami (movie_id). Obsahuje aj atribút director, ktorý rozlišuje, či daný jednotlivec vystupuje ako režisér filmu. Údaje sú napĺňané kombináciou vkladania údajov zo staging tabuliek `director_mapping_staging` a `role_mapping_staging`. Táto tabuľka umožňuje flexibilné analýzy vzťahov medzi jednotlivcami a ich úlohami vo filmoch.
+
+```sql
+CREATE OR REPLACE TABLE movie_names_mapping (
+    names_id VARCHAR(10),     
+    movie_id VARCHAR(10),     
+    director BOOLEAN  
+);
+
+INSERT INTO movie_names_mapping (names_id, movie_id, director)
+SELECT 
+    name_id AS names_id, 
+    movie_id,
+    TRUE AS director 
+FROM director_mapping_staging;
+
+INSERT INTO movie_names_mapping (names_id, movie_id, director)
+SELECT 
+    name_id AS names_id, 
+    movie_id,
+    FALSE AS director 
+FROM role_mapping_staging;
+```
 
 ---
 ### **3.3 Load (Načítanie dát)**
@@ -163,7 +195,7 @@ DROP TABLE IF EXISTS role_mapping_staging;
 DROP TABLE IF EXISTS rating_staging;
 DROP TABLE IF EXISTS director_mapping_staging;
 ```
-ETL proces v Snowflake umožnil spracovanie pôvodných dát z `.csv` formátu do viacdimenzionálneho modelu typu hviezda. Tento proces zahŕňal čistenie, obohacovanie a reorganizáciu údajov. Výsledný model umožňuje analýzu čitateľských preferencií a správania používateľov, pričom poskytuje základ pre vizualizácie a reporty.
+ETL proces v Snowflake umožnil spracovanie pôvodných dát z `.csv` formátu do viacdimenzionálneho modelu typu snehova vločka. Tento proces zahŕňal čistenie, obohacovanie a reorganizáciu údajov. Výsledný model umožňuje analyzovať preferencie publika a distribúciu vo filmovom priemysle, pričom poskytuje základ pre vizualizácie a reporty.
 
 ---
 ## **4 Vizualizácia dát**
@@ -171,7 +203,7 @@ ETL proces v Snowflake umožnil spracovanie pôvodných dát z `.csv` formátu d
 Dashboard obsahuje `6 vizualizácií`, ktoré poskytujú základný prehľad o kľúčových metrikách a trendoch týkajúcich sa kníh, používateľov a hodnotení. Tieto vizualizácie odpovedajú na dôležité otázky a umožňujú lepšie pochopiť správanie používateľov a ich preferencie.
 
 <p align="center">
-  <img src="https://github.com/JKabathova/AmazonBooks-ETL/blob/master/amazonbooks_dashboard.png" alt="ERD Schema">
+  <img src="https://github.com/nosorozka/IMDB-ETL/blob/main/amazonbooks_dashboard.png">
   <br>
   <em>Obrázok 3 Dashboard AmazonBooks datasetu</em>
 </p>
