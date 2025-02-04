@@ -257,11 +257,13 @@ SELECT sex, COUNT(*)FROM dim_names WHERE sex != 'unknown'
 GROUP BY sex;
 ```
 ---
-### **Graf 6:  Ktorý režisér nakrútil najviac filmov**
+### **Graf 7: 10 krajin ktoré sa najčastejšie podieľajú na natáčaní filmov**
 
 ```sql
-
-
+SELECT country_name, COUNT(*) AS count FROM movie_country_mapping
+GROUP BY country_name
+ORDER BY count DESC
+LIMIT 10; 
 ```
 
 Dashboard poskytuje úplný prehľad o údajoch a zároveň odpovedá na dôležité otázky týkajúce sa preferencií a správania používateľov. Vizualizácia uľahčuje interpretáciu údajov a dá sa použiť na optimalizáciu odporúčacích systémov, marketingových stratégií a knižničných služieb.
