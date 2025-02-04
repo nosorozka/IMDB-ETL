@@ -264,8 +264,8 @@ GROUP BY sex;
 
 ```
 
-Dashboard poskytuje komplexný pohľad na dáta, pričom zodpovedá dôležité otázky týkajúce sa čitateľských preferencií a správania používateľov. Vizualizácie umožňujú jednoduchú interpretáciu dát a môžu byť využité na optimalizáciu odporúčacích systémov, marketingových stratégií a knižničných služieb.
+Dashboard poskytuje úplný prehľad o údajoch a zároveň odpovedá na dôležité otázky týkajúce sa preferencií a správania používateľov. Vizualizácia uľahčuje interpretáciu údajov a dá sa použiť na optimalizáciu odporúčacích systémov, marketingových stratégií a knižničných služieb.
 
 ---
 
-**Autor:** Janka Pecuchová
+**Autor:** Sheiko Yehor
