@@ -205,89 +205,62 @@ Dashboard obsahuje `6 vizualizácií`, ktoré poskytujú základný prehľad o k
 <p align="center">
   <img src="https://github.com/nosorozka/IMDB-ETL/blob/main/amazonbooks_dashboard.png">
   <br>
-  <em>Obrázok 3 Dashboard AmazonBooks datasetu</em>
+  <em>Obrázok 3 Dashboard IMDB datasetu</em>
 </p>
 
 ---
-### **Graf 1: Najviac hodnotené knihy (Top 10 kníh)**
-Táto vizualizácia zobrazuje 10 kníh s najväčším počtom hodnotení. Umožňuje identifikovať najpopulárnejšie tituly medzi používateľmi. Zistíme napríklad, že kniha `Wild Animus` má výrazne viac hodnotení v porovnaní s ostatnými knihami. Tieto informácie môžu byť užitočné na odporúčanie kníh alebo marketingové kampane.
-
+### **Graf 1: Najpopulárnejšie dabingové jazyky (Top 10 kníh)**
+Táto vizualizácia zobrazuje 10 jazykov, v ktorých sa filmy vydávajú alebo dabujú. To vám umožní identifikovať najobľúbenejšie jazyky medzi používateľmi. Napríklad sme zistili, že francúzština a španielčina patria medzi top 3. Informácie môžu byť užitočné pre marketingové kampane na propagáciu a zvýšenie ziskov
 ```sql
-SELECT 
-    b.title AS book_title,
-    COUNT(f.fact_ratingID) AS total_ratings
-FROM FACT_RATINGS f
-JOIN DIM_BOOKS b ON f.bookID = b.dim_bookId
-GROUP BY b.title
-ORDER BY total_ratings DESC
-LIMIT 10;
+SELECT language_name, COUNT(*) AS count FROM movie_language_mapping
+GROUP BY language_name
+ORDER BY count DESC
+LIMIT 10; 
 ```
 ---
-### **Graf 2: Rozdelenie hodnotení podľa pohlavia používateľov**
-Graf znázorňuje rozdiely v počte hodnotení medzi mužmi a ženami. Z údajov je zrejmé, že ženy hodnotili knihy o niečo častejšie ako muži, no rozdiely sú minimálne a aktivita medzi pohlaviami je viac-menej vyrovnaná. Táto vizualizácia ukazuje, že obsah alebo kampane môžu byť efektívne zamerané na obe pohlavia bez potreby výrazného rozlišovania.
+### **Graf 2: 5 najobľúbenejších filmov podľa celkových zbierok**
+Graf ukazuje, že 3 filmy v najlepších svetových zbierkach patria do tej istej franšízy, čo naznačuje, že pre korporácie je prospešné podporovať existujúce franšízy a originálne nápady neprinášajú veľký zisk.
 
 ```sql
-SELECT 
-    u.gender,
-    COUNT(f.fact_ratingID) AS total_ratings
-FROM FACT_RATINGS f
-JOIN DIM_USERS u ON f.userID = u.dim_userId
-GROUP BY u.gender;
+SELECT DISTINCT title, CAST(REGEXP_REPLACE(WORLDWIDE_GROSS_INCOME, '[^0-9]', '') AS DECIMAL) AS worldwide_gross_income_numeric
+FROM FAKT_MOVIE
+WHERE WORLDWIDE_GROSS_INCOME != 'NULL' 
+ORDER BY worldwide_gross_income_numeric DESC
+LIMIT 5;
 ```
 ---
-### **Graf 3: Trendy hodnotení kníh podľa rokov vydania (2000–2024)**
-Graf ukazuje, ako sa priemerné hodnotenie kníh mení podľa roku ich vydania v období 2000–2024. Z vizualizácie je vidieť, že medzi rokmi 2000 a 2005 si knihy udržiavali stabilné priemerné hodnotenie. Po tomto období však nastal výrazný pokles priemerného hodnotenia. Od tohto bodu opäť postupne stúpajú a  po roku 2020, je tendencia, že knihy získavajú vyššie priemerné hodnotenia. Tento trend môže naznačovať zmenu kvality kníh, vývoj čitateľských preferencií alebo rozdiely v hodnotiacich kritériách používateľov.
+### **Graf 3: 5 najobľúbenejších filmov podľa priemerného hodnotenia**
+Na grafe vidíme 3 filmy natočené v Indii, ktoré môžu naznačovať vývoj filmového priemyslu v tejto krajine a potenciálne sa môžu stať dôvodom investícií do Bollywoodu alebo propagáciu tovaru a služieb v tomto regióne.
 
 ```sql
-SELECT 
-    b.release_year AS year,
-    AVG(f.rating) AS avg_rating
-FROM FACT_RATINGS f
-JOIN DIM_BOOKS b ON f.bookID = b.dim_bookId
-WHERE b.release_year BETWEEN 2000 AND 2024
-GROUP BY b.release_year
-ORDER BY b.release_year;
+SELECT rating::DECIMAL(10,2) AS rating, title FROM FAKT_MOVIE
+WHERE WORLDWIDE_GROSS_INCOME != 'NULL'
+ORDER BY rating DESC
+LIMIT 5;
+
 ```
 ---
-### **Graf 4: Celková aktivita počas dní v týždni**
-Tabuľka znázorňuje, ako sú hodnotenia rozdelené podľa jednotlivých dní v týždni. Z údajov vyplýva, že najväčšia aktivita je zaznamenaná cez víkendy (sobota a nedeľa) a počas dní na prelome pracovného týždňa a víkendu (piatok a pondelok). Tento trend naznačuje, že používatelia majú viac času na čítanie a hodnotenie kníh počas voľných dní.
+### **Graf 4: či závisí priemerné hodnotenie od dĺžky filmu**
+Na grafe vidíme, že so zvyšujúcou sa dĺžkou filmu sa zvyšuje aj jeho skóre. Trend je jasne viditeľný až do aktivity 130 minút, čo môže naznačovať optimálny čas, ktorý je používateľ ochotný stráviť filmom.
 
 ```sql
-SELECT 
-    d.dayOfWeekAsString AS day,
-    COUNT(f.fact_ratingID) AS total_ratings
-FROM FACT_RATINGS f
-JOIN DIM_DATE d ON f.dateID = d.dim_dateID
-GROUP BY d.dayOfWeekAsString
-ORDER BY total_ratings DESC;
+SELECT DURATION, COUNT(*), round(avg(rating),2) FROM FAKT_MOVIE
+GROUP BY DURATION
+ORDER BY DURATION ASC;
 ```
 ---
-### **Graf 5: Počet hodnotení podľa povolaní**
-Tento graf  poskytuje informácie o počte hodnotení podľa povolaní používateľov. Umožňuje analyzovať, ktoré profesijné skupiny sú najviac aktívne pri hodnotení kníh a ako môžu byť tieto skupiny zacielené pri vytváraní personalizovaných odporúčaní. Z údajov je zrejmé, že najaktívnejšími profesijnými skupinami sú `Marketing Specialists` a `Librarians`, s viac ako 1 miliónom hodnotení. 
+### **Graf 5: Pomer mužov a žien vo filmovom priemysle**
+Graf ukazuje rozdiely v počte hercov medzi mužmi a ženami. Údaje ukazujú, že v priemysle je viac mužov ako žien, čo môže určiť, že pre mužské pohlavie je o niečo jednoduchšie zamestnať sa vo filmovom priemysle 
 
 ```sql
-SELECT 
-    u.occupation AS occupation,
-    COUNT(f.fact_ratingID) AS total_ratings
-FROM FACT_RATINGS f
-JOIN DIM_USERS u ON f.userID = u.dim_userId
-GROUP BY u.occupation
-ORDER BY total_ratings DESC
-LIMIT 10;
+SELECT sex, COUNT(*)FROM dim_names WHERE sex != 'unknown'
+GROUP BY sex;
 ```
 ---
-### **Graf 6: Aktivita používateľov počas dňa podľa vekových kategórií**
-Tento stĺpcový graf ukazuje, ako sa aktivita používateľov mení počas dňa (dopoludnia vs. popoludnia) a ako sa líši medzi rôznymi vekovými skupinami. Z grafu vyplýva, že používatelia vo vekovej kategórii `55+` sú aktívni rovnomerne počas celého dňa, zatiaľ čo ostatné vekové skupiny vykazujú výrazne nižšiu aktivitu a majú obmedzený čas na hodnotenie, čo môže súvisieť s pracovnými povinnosťami. Tieto informácie môžu pomôcť lepšie zacieliť obsah a plánovať aktivity pre rôzne vekové kategórie.
+### **Graf 6:  Ktorý režisér nakrútil najviac filmov**
+
 ```sql
-SELECT 
-    t.ampm AS time_period,
-    u.age_group AS age_group,
-    COUNT(f.fact_ratingID) AS total_ratings
-FROM FACT_RATINGS f
-JOIN DIM_TIME t ON f.timeID = t.dim_timeID
-JOIN DIM_USERS u ON f.userID = u.dim_userId
-GROUP BY t.ampm, u.age_group
-ORDER BY time_period, total_ratings DESC;
+
 
 ```
 
